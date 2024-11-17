@@ -73,6 +73,19 @@ func (c *Client) Flush() []Message {
 	return msgs
 }
 
+func (c *Client) Pop() *Message {
+	c.mu.Lock()
+	if len(c.messages) == 0 {
+		c.mu.Unlock()
+		return nil
+	}
+	msg := c.messages[0]
+	c.messages = c.messages[1:]
+	c.mu.Unlock()
+
+	return &msg
+}
+
 func (c *Client) recordMessage(msg []byte) {
 	var m Message
 	if err := json.Unmarshal(msg, &m); err != nil {
