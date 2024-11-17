@@ -17,9 +17,9 @@ func New(sarc *signalapireceiver.Client) *Server {
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet || r.URL.Path != "/" {
+	if r.Method != http.MethodGet {
 		w.WriteHeader(http.StatusForbidden)
-		fmt.Fprintf(w, "GET / is the only allowed verb/route")
+		fmt.Fprintf(w, "GET is the only allowed verb")
 		return
 	}
 
