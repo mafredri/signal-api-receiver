@@ -24,6 +24,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	msgs := s.sarc.Flush()
+	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(msgs); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 	}
