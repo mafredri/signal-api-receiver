@@ -43,9 +43,9 @@ func main() {
 
 	sarc, err := receiver.New(uri)
 	if err != nil {
+		log.Printf("error creating a new websocket connetion: %s", err)
 		panic(err)
 	}
-	go sarc.ReceiveLoop()
 
 	srv := server.New(sarc)
 

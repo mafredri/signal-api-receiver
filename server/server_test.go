@@ -12,7 +12,30 @@ import (
 )
 
 type mockClient struct {
-	msgs []receiver.Message
+	connectCalled int
+	connectErr    chan error
+	recvMsg       chan receiver.Message
+	recvErr       chan error
+	msgs          []receiver.Message
+}
+
+func (mc *mockClient) Connect() error {
+	mc.connectCalled++
+	if mc.connectErr != nil {
+		return <-mc.connectErr
+	}
+	return nil
+}
+
+func (mc *mockClient) ReceiveLoop() error {
+	for {
+		select {
+		case msg := <-mc.recvMsg:
+			mc.msgs = append(mc.msgs, msg)
+		case err := <-mc.recvErr:
+			return err
+		}
+	}
 }
 
 func (mc *mockClient) Pop() *receiver.Message {
@@ -32,10 +55,44 @@ func (mc *mockClient) Flush() []receiver.Message {
 	return msgs
 }
 
+func TestServerReconnect(t *testing.T) {
+	mc := &mockClient{
+		connectErr: make(chan error),
+		recvMsg:    make(chan receiver.Message),
+		recvErr:    make(chan error),
+	}
+	_ = New(mc)
+
+	if want, got := 0, mc.connectCalled; want != got {
+		t.Errorf("want %d, got %d", want, got)
+	}
+
+	mc.recvMsg <- receiver.Message{Account: "0"}
+
+	mc.recvErr <- nil
+	mc.connectErr <- nil
+
+	if want, got := 1, len(mc.msgs); want != got {
+		t.Errorf("len(mc.msgs) want %d, got %d", want, got)
+	}
+
+	mc.recvMsg <- receiver.Message{Account: "0"}
+
+	if want, got := 1, mc.connectCalled; want != got {
+		t.Errorf("mc.connectCalled want %d, got %d", want, got)
+	}
+
+	mc.recvErr <- nil
+
+	if want, got := 2, len(mc.msgs); want != got {
+		t.Errorf("len(mc.msgs) want %d, got %d", want, got)
+	}
+}
+
 func TestServeHTTP(t *testing.T) {
-	mc := &mockClient{msgs: []receiver.Message{}}
-	s := Server{sarc: mc}
-	hs := httptest.NewServer(&s)
+	mc := &mockClient{}
+	s := New(mc)
+	hs := httptest.NewServer(s)
 	defer hs.Close()
 
 	t.Run("GET /receive/pop", func(t *testing.T) {
@@ -81,9 +138,9 @@ func TestServeHTTP(t *testing.T) {
 
 		t.Run("three messages in the queue", func(t *testing.T) {
 			want := []receiver.Message{
-				receiver.Message{Account: "0"},
-				receiver.Message{Account: "1"},
-				receiver.Message{Account: "2"},
+				{Account: "0"},
+				{Account: "1"},
+				{Account: "2"},
 			}
 			mc.msgs = want
 
@@ -146,7 +203,7 @@ func TestServeHTTP(t *testing.T) {
 		})
 
 		t.Run("one message in the queue", func(t *testing.T) {
-			want := []receiver.Message{receiver.Message{Account: "0"}}
+			want := []receiver.Message{{Account: "0"}}
 			mc.msgs = want
 
 			resp, err := http.Get(hs.URL + "/receive/flush")
@@ -175,9 +232,9 @@ func TestServeHTTP(t *testing.T) {
 
 		t.Run("three messages in the queue", func(t *testing.T) {
 			want := []receiver.Message{
-				receiver.Message{Account: "0"},
-				receiver.Message{Account: "1"},
-				receiver.Message{Account: "2"},
+				{Account: "0"},
+				{Account: "1"},
+				{Account: "2"},
 			}
 			mc.msgs = want
 
